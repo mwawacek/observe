@@ -13,6 +13,39 @@ const TABLE_AFTER: Record<string, RegExp> = {
   UPDATE: /^\s*UPDATE\s+(?:ONLY\s+)?([\w."`[\]]+)/i,
 };
 
+/** What a parenthesis holding a subquery opens with. */
+const SUBQUERY = /\s*(?:SELECT|WITH)\b/iy;
+
+/**
+ * `statement` without the parentheses that hold no subquery - a function's
+ * arguments, a column list - and what they hold. A `FROM` inside one,
+ * `EXTRACT(EPOCH FROM created_at)` or `TRIM(BOTH ' ' FROM name)`, is an
+ * argument, not the table. One pass, so it stays linear however deeply the
+ * parentheses nest.
+ */
+function withoutNonQueryParentheses(statement: string): string {
+  let text = "";
+  let copied = 0;
+  // Where each open parenthesis starts in `text`, or -1 for a subquery's.
+  const opened: number[] = [];
+  for (let index = 0; index < statement.length; index++) {
+    const char = statement[index];
+    if (char === "(") {
+      text += statement.slice(copied, index);
+      copied = index;
+      SUBQUERY.lastIndex = index + 1;
+      opened.push(SUBQUERY.test(statement) ? -1 : text.length);
+    } else if (char === ")") {
+      const at = opened.pop();
+      if (at !== undefined && at !== -1) {
+        text = `${text.slice(0, at)} `;
+        copied = index + 1;
+      }
+    }
+  }
+  return text + statement.slice(copied);
+}
+
 export interface SqlStatementDescription {
   /**
    * A low-cardinality label: the verb and the table, `SELECT users`. It names
@@ -143,7 +176,7 @@ export function describeSanitizedSqlStatement(
     return { operation: "QUERY", statement };
   }
   const table = TABLE_AFTER[verb]
-    ?.exec(statement)?.[1]
+    ?.exec(withoutNonQueryParentheses(statement))?.[1]
     ?.replace(/["`[\]]/g, "")
     .slice(0, MAX_IDENTIFIER_LENGTH);
   return { operation: table ? `${verb} ${table}` : verb, statement };

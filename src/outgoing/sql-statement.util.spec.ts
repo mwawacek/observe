@@ -39,6 +39,21 @@ describe.each(DIALECTS)("describeSqlStatement (%s)", (dialect) => {
       "DELETE sessions",
       "DELETE FROM ONLY sessions WHERE id = ?",
     ],
+    [
+      "SELECT EXTRACT(EPOCH FROM created_at) AS ts FROM events WHERE id = 1",
+      "SELECT events",
+      "SELECT EXTRACT(EPOCH FROM created_at) AS ts FROM events WHERE id = ?",
+    ],
+    [
+      "SELECT TRIM(BOTH ' ' FROM lower(name)) FROM users",
+      "SELECT users",
+      "SELECT TRIM(BOTH ? FROM lower(name)) FROM users",
+    ],
+    [
+      "SELECT * FROM (SELECT id FROM orders) AS recent",
+      "SELECT orders",
+      "SELECT * FROM (SELECT id FROM orders) AS recent",
+    ],
     ["BEGIN", "BEGIN", "BEGIN"],
     ["  ", "QUERY", ""],
   ])("%s", (sql, operation, statement) => {
